@@ -1,0 +1,38 @@
+module tb();
+  logic signed [`size-1:0] a[`matrix_size-1:0];
+  logic signed [`size-1:0] b[`matrix_size-1:0];
+  logic clk, reset;
+  logic signed [`p_width+3:0] out ;
+  logic signed [`p_width+2:0] expected;
+  initial begin
+    clk=0;
+    forever #5 clk=~clk;
+  end
+     pe mod(a,b,clk, reset,out);   
+  initial begin
+    reset = 1;expected =0;
+    repeat(8) @(posedge clk);  
+    reset = 0;
+  end
+  initial begin
+    @(negedge reset);
+    repeat (10) begin
+      expected=0;
+      for(int i=0;i<`matrix_size;i++)begin
+        a[i] = $random;
+        b[i] = $random;
+        expected=(a[i]*b[i])+expected;
+    end
+      @(posedge clk);   
+      repeat (8) @(posedge clk);
+
+      if (out === expected)
+        $display("PASS : a=%0d b=%0d out=%0d", a, b, out);
+      else
+        $display("FAIL : a=%0p b=%0p out=%0d expected=%0d", 
+                  a, b, out, expected);
+    end
+
+    $finish;
+  end
+endmodule
