@@ -1,0 +1,22 @@
+module tb();
+   logic signed[`size-1:0]a,b;
+  logic clk,reset;
+   logic signed [`p_width-1:0]pp_out[`p_no-1:0];
+  booth dut(a,b,pp_out,clk,reset);
+initial begin
+  clk=0;
+  forever #5 clk=~clk;
+end
+  initial begin
+    reset=1;
+    #1
+    reset=0;
+  repeat(1)begin
+  a=$random;b=$random;
+    @(posedge clk);
+     #12;
+     $display("a=%d|b=%d|out=%p",a,b,pp_out);
+    #30 $finish;
+end
+end
+endmodule
