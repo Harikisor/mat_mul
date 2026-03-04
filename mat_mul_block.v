@@ -84,6 +84,62 @@ end
 end
 endmodule
  */
+/*module mul(
+  input  logic clk,
+  input  logic reset,
+  input  logic signed [`size-1:0] a,
+  input  logic signed [`size-1:0] b,
+  output logic signed [`p_width+1:0] out
+);
+
+  wire signed [`p_width-1:0] w[`p_no-1:0];
+
+  logic signed [`p_width:0] temp_sum[`reg_wire-1:0];
+  logic signed [`p_width:0] out_sum[`reg_wire-1:0];
+  logic signed [`p_width+1:0] out_reg;
+    logic signed [`p_width+1:0] sum;
+  booth m(a, b, w, clk, reset);
+
+  // -------------------------
+  // Stage 1: Pairwise Add
+  // -------------------------
+  always_comb begin
+    for (int i = 0; i < `reg_wire; i++)
+      temp_sum[i] = w[2*i] + w[2*i+1];
+  end
+   
+  // -------------------------
+  // Stage 2: Register
+  // -------------------------
+  always_ff @(posedge clk) begin
+    if (reset) begin
+      for (int i = 0; i < `reg_wire; i++)
+        out_sum[i] <= 0;
+    end
+    else begin
+      for (int i = 0; i < `reg_wire; i++)
+        out_sum[i] <= temp_sum[i];
+    end
+  end
+
+   always_comb begin
+    sum=0;
+     for (int i = 0; i < `reg_wire; i++)
+      sum = sum + out_sum[i];
+  end
+     
+      always@(posedge clk)begin
+        if(reset)begin
+        out_reg<=0;
+        end
+        else begin
+      out_reg <= sum;
+    end
+  end
+
+  assign out = out_reg;
+
+endmodule*/
 module mul(
   clk,
   reset,
@@ -326,13 +382,16 @@ module mac(
   reg signed [`p_width+3:0] out_reg[`NUM_PE-1:0];
 generate
   genvar i;
-  for(i=0;i<`TOTAL;i=i+4)begin
-  pe p1(
-  '{a[i], a[i+1], a[i+2], a[i+3]},
-  '{b[i], b[i+1], b[i+2], b[i+3]},
-  clk, reset,
-    q[i/4]
-);
+  for (i = 0; i < `TOTAL; i = i + `matrix_size) begin : PE_GEN
+
+    pe u_pe (
+      .a(a[i +: `matrix_size]),
+      .b(b[i +: `matrix_size]),
+      .clk(clk),
+      .reset(reset),
+      .out(q[i/`matrix_size])
+    );
+
   end
 endgenerate
 
