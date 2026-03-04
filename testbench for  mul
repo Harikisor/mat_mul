@@ -1,0 +1,51 @@
+module tb;
+  logic clk;
+  logic reset;
+  logic signed [`size-1:0] a, b;
+  logic signed [`p_width+1:0] out;
+
+  logic signed [`p_width+1:0] expected;
+
+  mul dut (
+    .clk(clk),
+    .reset(reset),
+    .a(a),
+    .b(b),
+    .out(out)
+  );
+
+
+  initial begin
+    clk = 0;
+    forever #5 clk = ~clk;
+  end
+
+  initial begin
+    reset = 1;
+    repeat(4) @(posedge clk);  
+    reset = 0;
+  end
+
+  initial begin
+    @(negedge reset);
+
+    repeat (10) begin
+      a = $random;
+      b = $random;
+      expected = a * b;
+
+      @(posedge clk);   
+      repeat (4) @(posedge clk);
+
+      if (out === expected)
+        $display("PASS : a=%0d b=%0d out=%0d", a, b, out);
+      else
+        $display("FAIL : a=%0d b=%0d out=%0d expected=%0d", 
+                  a, b, out, expected);
+
+    end
+
+    $finish;
+  end
+
+endmodule
