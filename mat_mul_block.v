@@ -1,16 +1,24 @@
-module booth (a,b,pp1,pp2,pp3,pp4);
-input signed[7:0]a,b;
-output signed  [15:0]pp1,pp2,pp3,pp4;
-reg[2:0]e[3:0];
-reg signed [8:0]c;
-reg signed [15:0]pp[3:0];
-reg signed  [15:0]sum=16'h000;
-reg signed  [15:0]sum1=16'h000;
-reg signed [15:0]p;
+`define size 8
+`define p_width (`size*2)
+`define p_no (`size/2)
+`define reg_wire (`p_no/2)
+`define matrix_size 4
+`define matrix_col 4
+`define NUM_PE (`matrix_size*`matrix_col)/4
+`define TOTAL (`matrix_size * `matrix_col)
+module booth (a,b,pp_out,clk,reset);
+  input signed[`size-1:0]a,b;
+  input clk,reset;
+  output reg signed  [`p_width-1:0]pp_out[`p_no-1:0];
+  reg[2:0]e[`p_no-1:0];
+  reg signed [`size:0]c;
+  reg signed [`p_width-1:0]pp[`p_no-1:0];
+  reg signed [`p_width-1:0] r[`p_no-1:0];
+reg signed [`p_width-1:0]p;
 integer j,i;
-always@(*)begin
+  always@(*)begin
 c={a,1'b0};
- for(j=1;j<8;j=j+2)begin
+  for(j=1;j<`size;j=j+2)begin
  case({c[j+1],c[j],c[j-1]})
  3'b000,3'b111:e[(j-1)/2]=3'b000;
  3'b001,3'b010:e[(j-1)/2]=3'b001;
@@ -20,95 +28,325 @@ c={a,1'b0};
  default:e[(j-1)/2]=3'b000;
  endcase
  end
-// $display("%b",e[0]);
-// $display("%b",e[1]);
-// $display("%b",e[2]);
-// $display("%b",e[3]);
-for(i=0;i<4;i=i+1)begin
+//$display("%b",e[0]);
+//$display("%b",e[1]);
+//$display("%b",e[2]);
+//$display("%b",e[3]);
+  for(int i=0;i<`p_no;i=i+1)begin
  case(e[i])
- 3'b000:pp[i]=16'h0000;
+   3'b000:pp[i]='0;
  3'b001:pp[i]=b;
  3'b101:pp[i]=-b;
  3'b010:pp[i]=b<<1;
  3'b110:pp[i]=-(b<<1);
  endcase
-  if(e[i]==010||e[i]==110)begin
- p=pp[i];
- p={{3{p[8]}},p[8:0]};
- end
- else begin
- p={{4{p[7]}},p[7:0]};
- end
- p=pp[i];
  pp[i]=$signed(pp[i])<<(2*i);
+  //  $display("pp%d is %d",i,pp[i]);
   end
- end
- assign pp1=pp[0];
- assign pp2=pp[1];
- assign pp3=pp[2];
- assign pp4=pp[3];
+  end
+  always @(posedge clk) begin
+    if(reset) begin
+      for(int i=0;i<`p_no;i++) r[i] <= 0;
+    end else begin
+      for(int i=0;i<`p_no;i++) r[i] <= pp[i];
+    end
+  end
+
+  always@(posedge clk)begin
+    for(int i=0;i<`p_no;i++)begin
+      pp_out[i]<=r[i];
+   // $display("pp_out%d is %d",i,pp_out[i]);
+  end
+  end
 endmodule
 
+/*
+module tb();
+   logic signed[`size-1:0]a,b;
+  logic clk,reset;
+   logic signed [`p_width-1:0]pp_out[`p_no-1:0];
+  booth dut(a,b,pp_out,clk,reset);
+initial begin
+  clk=0;
+  forever #5 clk=~clk;
+end
+  initial begin
+    reset=1;
+    #1
+    reset=0;
+  repeat(1)begin
+  a=$random;b=$random;
+    @(posedge clk);
+     #12;
+     $display("a=%d|b=%d|out=%p",a,b,pp_out);
+    #30 $finish;
+end
+end
+endmodule
+ */
 module mul(
-    input signed [7:0] a, b,
-    input clk, reset_mul, reset_add,
-    output signed [15:0] out
+  clk,
+  reset,
+  a,
+  b,
+  out
 );
-    wire signed [15:0] w[3:0];
-    reg signed [15:0] r[3:0];
-    wire signed [15:0] sum_wire;
 
-    booth b_inst(a, b, w[0], w[1], w[2], w[3]);
+  `define size 8
+  `define p_width (`size*2)
+  `define p_no (`size/2)
+  `define reg_wire (`p_no/2)
 
-    
+  input clk;
+  input reset;
+  input signed [`size-1:0] a;
+  input signed [`size-1:0] b;
+  output signed [`p_width+1:0] out;
+
+  wire signed [`p_width-1:0] w[`p_no-1:0];
+
+  reg signed [`p_width:0] temp_sum[`reg_wire-1:0];
+  reg signed [`p_width:0] out_sum[`reg_wire-1:0];
+  reg signed [`p_width+1:0] sum;
+  reg signed [`p_width+1:0] out_reg;
+
+  integer i;
+
+  booth m(a, b, w, clk, reset);
+
+  always @(*) begin
+    for (i = 0; i < `reg_wire; i = i + 1)
+      temp_sum[i] = w[2*i] + w[2*i+1];
+  end
+
+  always @(posedge clk) begin
+    if (reset) begin
+      for (i = 0; i < `reg_wire; i = i + 1)
+        out_sum[i] <= 0;
+    end
+    else begin
+      for (i = 0; i < `reg_wire; i = i + 1)
+        out_sum[i] <= temp_sum[i];
+    end
+  end
+
+  always @(*) begin
+    sum = 0;   
+    for (i = 0; i < `reg_wire; i = i + 1)
+      sum = sum + out_sum[i];
+  end
+
+  always @(posedge clk) begin
+    if (reset)
+      out_reg <= 0;
+    else
+      out_reg <= sum;
+  end
+
+  assign out = out_reg;
+
+endmodule
+
+`timescale 1ns/1ps
+/*
+module tb;
+  logic clk;
+  logic reset;
+  logic signed [`size-1:0] a, b;
+  logic signed [`p_width+1:0] out;
+
+  logic signed [`p_width+1:0] expected;
+
+  mul dut (
+    .clk(clk),
+    .reset(reset),
+    .a(a),
+    .b(b),
+    .out(out)
+  );
+
+
+  initial begin
+    clk = 0;
+    forever #5 clk = ~clk;
+  end
+
+  initial begin
+    reset = 1;
+    repeat(4) @(posedge clk);  
+    reset = 0;
+  end
+
+  initial begin
+    @(negedge reset);
+
+    repeat (10) begin
+      a = $random;
+      b = $random;
+      expected = a * b;
+
+      @(posedge clk);   
+      repeat (4) @(posedge clk);
+
+      if (out === expected)
+        $display("PASS : a=%0d b=%0d out=%0d", a, b, out);
+      else
+        $display("FAIL : a=%0d b=%0d out=%0d expected=%0d", 
+                  a, b, out, expected);
+
+    end
+
+    $finish;
+  end
+
+endmodule
+*/
+module pe(
+  input signed [`size-1:0] a[`matrix_size-1:0],
+  input signed [`size-1:0] b[`matrix_size-1:0],
+    input clk,input reset,
+  output signed [`p_width+3:0] out 
+);
+  reg signed [`p_width+2:0] r[`matrix_size-1:0];
+  wire signed [`p_width+1:0] m_out[`matrix_size-1:0];
+  reg signed [`p_width+2:0] sum_wire[(`matrix_size/2)-1:0];
+  reg signed [`p_width+3:0] sum;
+  reg signed [`p_width+3:0] out_f;
+  reg signed [`p_width+2:0] out_reg[(`matrix_size/2)-1:0];
+   generate
+  genvar k;
+  for (k = 0; k < `matrix_size; k = k + 1) begin : MUL_ARRAY
+    mul u_m1 (
+      .clk(clk),
+      .reset(reset),
+      .a(a[k]),
+      .b(b[k]),
+      .out(m_out[k])
+    );
+  end
+endgenerate
+  
+  
     always @(posedge clk) begin
-        if (reset_mul) begin
-            r[0] <= 0; r[1] <= 0; r[2] <= 0; r[3] <= 0;
-        end else begin
-            r[0] <= w[0]; r[1] <= w[1]; r[2] <= w[2]; r[3] <= w[3];
+        if (reset) begin
+          for(int i=0;i<`matrix_size;i++)begin
+            r[i] <= '0;
+        end
+    end 
+      else begin
+        for(int i=0;i<`matrix_size;i++)begin
+          r[i] <= m_out[i];
+          
+        end
+ //   $display("m_out[i] is %p",m_out);
+      end
+    end
+  
+  always@(*)begin
+    for(int l=0;l<`matrix_size/2;l++)begin
+       sum_wire[l]=r[2*l]+r[2*l+1];
+    end
+  end
+    always @(posedge clk) begin
+       if (reset) begin
+         for(int i=0;i<`matrix_size/2;i++)begin
+            out_reg[i] <= '0;
+        end
+    end 
+      else begin
+        for(int i=0;i<`matrix_size/2;i++)begin
+        out_reg[i] <= sum_wire[i];
+         end
         end
     end
-
-    assign sum_wire = r[0] + r[1] + r[2] + r[3];
-    reg signed [15:0] out_reg;
-    always @(posedge clk) begin
-        if (reset_add) out_reg <= 0;
-        else           out_reg <= sum_wire;
+  always @(*) begin
+   sum = 0;
+    for(int i=0;i<`matrix_size/2;i++)begin
+    sum = sum + out_reg[i];
+  end
+  end
+  always@(posedge clk)begin
+    if(reset)begin
+      out_f<=0;
     end
-    assign out = out_reg;
+    else begin
+      out_f<=sum;
+  end
+  end
+assign out = out_f;
 endmodule
+/*
+module tb();
+  logic signed [`size-1:0] a[`matrix_size-1:0];
+  logic signed [`size-1:0] b[`matrix_size-1:0];
+  logic clk, reset;
+  logic signed [`p_width+3:0] out ;
+  logic signed [`p_width+2:0] expected;
+  initial begin
+    clk=0;
+    forever #5 clk=~clk;
+  end
+     pe mod(a,b,clk, reset,out);   
+  initial begin
+    reset = 1;expected =0;
+    repeat(8) @(posedge clk);  
+    reset = 0;
+  end
+  initial begin
+    @(negedge reset);
+    repeat (10) begin
+      expected=0;
+      for(int i=0;i<`matrix_size;i++)begin
+        a[i] = $random;
+        b[i] = $random;
+        expected=(a[i]*b[i])+expected;
+    end
+      @(posedge clk);   
+      repeat (8) @(posedge clk);
 
-module pe(
-    input signed [7:0] a,b,c,d,e,f,g,h,
-    input clk, reset_mul, reset_add,
-    output signed [17:0] out 
-);
-     reg signed [15:0] r[3:0];
-    wire signed [15:0] m_out[3:0];
-    
-    mul m1(a, b, clk, reset_mul, reset_add, m_out[0]);
-    mul m2(c, d, clk, reset_mul, reset_add, m_out[1]);
-    mul m3(e, f, clk, reset_mul, reset_add, m_out[2]);
-    mul m4(g, h, clk, reset_mul, reset_add, m_out[3]);
-   
+      if (out === expected)
+        $display("PASS : a=%0d b=%0d out=%0d", a, b, out);
+      else
+        $display("FAIL : a=%0p b=%0p out=%0d expected=%0d", 
+                  a, b, out, expected);
+    end
 
-    assign out = $signed(m_out[0]) + $signed(m_out[1]) + 
-                 $signed(m_out[2]) + $signed(m_out[3]);
+    $finish;
+  end
 endmodule
-
+*/
 module mac(
-    input signed [7:0] a,b,c,d,e,f,g,h, 
-                       a1,b1,c1,d1,e1,f1,g1,h1, 
-                       a2,b2,c2,d2,e2,f2,g2,h2, 
-                       a3,b3,c3,d3,e3,f3,g3,h3,
-    input clk, reset_mul, reset_add,
-    output signed [19:0] out 
+  input signed [`size-1:0] a[(`matrix_size*`matrix_col)-1:0],
+  input signed [`size-1:0] b[(`matrix_size*`matrix_col)-1:0],
+    input clk, reset,
+  output reg signed [`p_width+3:0] out[`NUM_PE-1:0]
 );
-    wire signed [17:0] q1, q2, q3, q4;
-    pe p1(a,  b,  c,  d,  e,  f,  g,  h,  clk, reset_mul, reset_add, q1);
-    pe p2(a1, b1, c1, d1, e1, f1, g1, h1, clk, reset_mul, reset_add, q2);
-    pe p3(a2, b2, c2, d2, e2, f2, g2, h2, clk, reset_mul, reset_add, q3);
-    pe p4(a3, b3, c3, d3, e3, f3, g3, h3, clk, reset_mul, reset_add, q4);    
-    assign out = $signed(q1) + $signed(q2) + $signed(q3) + $signed(q4);
-endmodule
+  
+  wire signed [`p_width+3:0] q[`NUM_PE-1:0];
+  reg signed [`p_width+3:0] out_reg[`NUM_PE-1:0];
+generate
+  genvar i;
+  for(i=0;i<`TOTAL;i=i+4)begin
+  pe p1(
+  '{a[i], a[i+1], a[i+2], a[i+3]},
+  '{b[i], b[i+1], b[i+2], b[i+3]},
+  clk, reset,
+    q[i/4]
+);
+  end
+endgenerate
 
+    always @(posedge clk) begin
+      for(int i=0;i<`NUM_PE;i++)begin
+      if (reset) 
+        out_reg[i] <= 0;
+      else         
+        out_reg[i] <= q[i];
+    end
+    end
+  always@(*)begin
+    for(int i;i<`NUM_PE;i++)begin
+      out[i]=out_reg[i]; 
+    end
+  end
+endmodule
